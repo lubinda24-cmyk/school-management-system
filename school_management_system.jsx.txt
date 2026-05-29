@@ -1,0 +1,818 @@
+import { useState, useEffect } from "react";
+
+// ── DATA ────────────────────────────────────────────────────────────────────
+const SUBJECTS = [
+  "Biology","Chemistry","Physics","Agriculture","ICT","French","English",
+  "Silozi","History","Religious Education","Civic Education","Geography",
+  "Design & Technology","Travel & Tourism","Food & Nutrition",
+  "Principles of Accounting","Commerce","Mathematics","Music","MUS/AGR"
+];
+
+const CLASSES = [
+  "F1B","F1C","F1G",
+  "F2B","F2C","F2G","F2R","F2Y",
+  "10B","10C","10R","10Y",
+  "11B","11C","11R","11Y",
+  "12B","12C","12R","12Y"
+];
+
+const TEACHERS = [
+  "Kalinda Fredson","Ngunda Jacob","Ndimba Kalenga","Musonda Memory",
+  "Imanga Mutemwa Mike","Matyola Lovity","Mutemwa Maibiba","Mukuba Mwambu",
+  "Lumbongo Lumbongo","Mungungu Mungungu","Anastasia Tamala Chilembo",
+  "Sisupo Kamona Doreen","Mwiya Mushaukwa","Mubiana Akafekwa",
+  "Tembo Christine","Mupuse Theresa","Kalirani Dalitso Banda Yobe",
+  "Muhamubi Priscillah","Simataa Mulasu Derrick","Mooya Trust",
+  "Inaka Mate","Kayombo Namonda Lucy","Mulipa Hope B","Lubinda Lubinda",
+  "Kabanda Gideon","Sale Mwendalubi","Mbangu Kelvin Chitumbo",
+  "Pellser Edward","Sibeso Mwangelwa","Ngenda Jimmy K","Mwendabai Nyambe",
+  "Ndiyoyi Lyamba","Ngengela Akabana","Sinuma Kamona","Kay Muyunda Kabubi",
+  "Kapend Tshbal","Mihupulo Mwangala","Kafula Boas","Sakala Sakala",
+  "Samwanu Moses","Mwamba Samuel","Katolo Likundo Peter","Saeli Pumulo",
+  "Mulenga Virginia","Mwewa Rabecca","Libengwa Muimui","Simataa Mwanamwale",
+  "Kamwanga Peter","Maloba Agness","Banda Loveness","Lyahenga Muyunda",
+  "Muvambekwa Edgar"
+];
+
+// teacher accounts: username = first word of name lowercase, password = "school2024"
+const TEACHER_ACCOUNTS = TEACHERS.map(t => ({
+  name: t,
+  username: t.split(" ")[0].toLowerCase(),
+  password: "school2024"
+}));
+
+const ADMIN_ACCOUNT = { username: "admin", password: "admin2024", name: "Administrator" };
+
+function getGrade(mark) {
+  if (mark === null || mark === undefined || isNaN(mark)) return "-";
+  if (mark >= 75) return "1";
+  if (mark >= 70) return "2";
+  if (mark >= 65) return "3";
+  if (mark >= 60) return "4";
+  if (mark >= 55) return "5";
+  if (mark >= 50) return "6";
+  if (mark >= 45) return "7";
+  if (mark >= 40) return "8";
+  return "9";
+}
+
+function gradeColor(grade) {
+  const g = parseInt(grade);
+  if (isNaN(g)) return "#64748b";
+  if (g <= 2) return "#16a34a";
+  if (g <= 4) return "#2563eb";
+  if (g <= 6) return "#d97706";
+  if (g <= 8) return "#dc2626";
+  return "#7c3aed";
+}
+
+function calcRow(row) {
+  const pre = parseFloat(row.preMid);
+  const mid = parseFloat(row.midterm);
+  const exam = parseFloat(row.exam);
+  const ca = (!isNaN(pre) && !isNaN(mid)) ? (pre + mid) / 2 : null;
+  const ca40 = ca !== null ? ca * 0.4 : null;
+  const exam60 = !isNaN(exam) ? exam * 0.6 : null;
+  const overall = (ca40 !== null && exam60 !== null) ? ca40 + exam60 : null;
+  const grade = overall !== null ? getGrade(overall) : "-";
+  return { ca, ca40, exam60, overall, grade };
+}
+
+// storage key
+const STORAGE_KEY = "school_mgmt_marks_v1";
+
+function loadMarks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveMarks(marks) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(marks)); } catch {}
+}
+
+// ── STYLES ──────────────────────────────────────────────────────────────────
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1e293b;min-height:100vh}
+  :root{
+    --navy:#0f2d5e;--blue:#1d5fc4;--sky:#e8f0fe;--gold:#f59e0b;
+    --green:#16a34a;--red:#dc2626;--gray:#64748b;--light:#f8fafc;
+    --border:#e2e8f0;--shadow:0 2px 12px rgba(0,0,0,0.08);
+  }
+  /* LOGIN */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#0f2d5e 0%,#1d5fc4 60%,#3b82f6 100%);
+    position:relative;overflow:hidden}
+  .login-wrap::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;
+    background:rgba(255,255,255,0.04);top:-200px;right:-200px}
+  .login-wrap::after{content:'';position:absolute;width:400px;height:400px;border-radius:50%;
+    background:rgba(255,255,255,0.04);bottom:-100px;left:-100px}
+  .login-card{background:#fff;border-radius:20px;padding:48px 40px;width:420px;max-width:95vw;
+    box-shadow:0 24px 64px rgba(0,0,0,0.25);position:relative;z-index:1}
+  .login-logo{text-align:center;margin-bottom:32px}
+  .login-logo .icon{font-size:48px;margin-bottom:8px}
+  .login-logo h1{font-family:'DM Serif Display',serif;font-size:26px;color:var(--navy);line-height:1.2}
+  .login-logo p{color:var(--gray);font-size:14px;margin-top:4px}
+  .tab-row{display:flex;background:#f1f5f9;border-radius:10px;padding:4px;margin-bottom:28px;gap:4px}
+  .tab-btn{flex:1;padding:10px;border:none;background:transparent;border-radius:8px;
+    font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;
+    color:var(--gray);transition:all .2s}
+  .tab-btn.active{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(0,0,0,0.1)}
+  .form-group{margin-bottom:20px}
+  .form-group label{display:block;font-size:13px;font-weight:600;color:var(--navy);margin-bottom:6px}
+  .form-group input,.form-group select{width:100%;padding:12px 14px;border:1.5px solid var(--border);
+    border-radius:10px;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;
+    transition:border-color .2s;background:#fafafa}
+  .form-group input:focus,.form-group select:focus{border-color:var(--blue);background:#fff}
+  .btn-primary{width:100%;padding:14px;background:var(--navy);color:#fff;border:none;
+    border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;
+    transition:background .2s;letter-spacing:.3px}
+  .btn-primary:hover{background:var(--blue)}
+  .error-msg{background:#fef2f2;color:var(--red);padding:10px 14px;border-radius:8px;
+    font-size:13px;margin-bottom:16px;border:1px solid #fecaca}
+  /* LAYOUT */
+  .app-layout{display:flex;min-height:100vh}
+  .sidebar{width:260px;background:var(--navy);color:#fff;display:flex;flex-direction:column;
+    position:fixed;top:0;left:0;height:100vh;z-index:100;transition:transform .3s}
+  .sidebar-logo{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,0.1)}
+  .sidebar-logo h2{font-family:'DM Serif Display',serif;font-size:20px;line-height:1.3}
+  .sidebar-logo p{font-size:12px;opacity:.6;margin-top:2px}
+  .sidebar-user{padding:16px 24px;background:rgba(255,255,255,0.07);margin:12px;border-radius:10px}
+  .sidebar-user .role{font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.8px}
+  .sidebar-user .name{font-size:14px;font-weight:600;margin-top:2px}
+  .sidebar-nav{flex:1;padding:8px 12px;overflow-y:auto}
+  .nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;
+    cursor:pointer;font-size:14px;font-weight:500;transition:all .2s;margin-bottom:2px;color:rgba(255,255,255,0.75)}
+  .nav-item:hover{background:rgba(255,255,255,0.1);color:#fff}
+  .nav-item.active{background:rgba(255,255,255,0.15);color:#fff;font-weight:600}
+  .nav-item .icon{font-size:18px;width:24px;text-align:center}
+  .sidebar-footer{padding:16px 12px;border-top:1px solid rgba(255,255,255,0.1)}
+  .logout-btn{width:100%;padding:11px;background:rgba(255,255,255,0.08);color:#fff;border:none;
+    border-radius:10px;cursor:pointer;font-size:14px;font-family:'DM Sans',sans-serif;
+    font-weight:500;transition:background .2s}
+  .logout-btn:hover{background:rgba(255,255,255,0.15)}
+  .main-content{margin-left:260px;flex:1;padding:32px;min-height:100vh}
+  .page-header{margin-bottom:28px}
+  .page-header h1{font-family:'DM Serif Display',serif;font-size:30px;color:var(--navy)}
+  .page-header p{color:var(--gray);font-size:15px;margin-top:4px}
+  /* CARDS */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+  .stat-card{background:#fff;border-radius:14px;padding:20px;box-shadow:var(--shadow);
+    border-left:4px solid var(--blue)}
+  .stat-card .label{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--gray)}
+  .stat-card .value{font-size:32px;font-weight:700;color:var(--navy);margin:4px 0}
+  .stat-card .sub{font-size:13px;color:var(--gray)}
+  .card{background:#fff;border-radius:14px;padding:24px;box-shadow:var(--shadow);margin-bottom:20px}
+  .card-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:16px;
+    display:flex;align-items:center;gap:8px}
+  /* MARKS TABLE */
+  .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:var(--navy);color:#fff;padding:12px 14px;text-align:left;font-weight:600;
+    font-size:12px;letter-spacing:.5px;white-space:nowrap}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#f8fafc}
+  .mark-input{width:70px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;
+    text-align:center;font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
+  .mark-input:focus{border-color:var(--blue)}
+  .calc-cell{font-weight:600;color:var(--navy)}
+  .grade-badge{display:inline-block;width:28px;height:28px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:13px;color:#fff}
+  /* SELECTS */
+  .filter-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-end}
+  .filter-group{display:flex;flex-direction:column;gap:4px}
+  .filter-group label{font-size:12px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.5px}
+  .filter-group select{padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;
+    font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:#fff;min-width:160px}
+  .filter-group select:focus{border-color:var(--blue)}
+  .btn-save{padding:10px 24px;background:var(--green);color:#fff;border:none;border-radius:10px;
+    font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s}
+  .btn-save:hover{background:#15803d}
+  .btn-secondary{padding:10px 20px;background:var(--sky);color:var(--blue);border:none;border-radius:10px;
+    font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
+  .btn-secondary:hover{background:#dbeafe}
+  .success-toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;
+    padding:14px 20px;border-radius:12px;font-weight:600;font-size:14px;z-index:999;
+    box-shadow:0 4px 16px rgba(0,0,0,0.15);animation:slideIn .3s ease}
+  @keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .empty-state{text-align:center;padding:48px;color:var(--gray)}
+  .empty-state .icon{font-size:48px;margin-bottom:12px}
+  .empty-state p{font-size:15px}
+  /* RESPONSIVE */
+  @media(max-width:768px){
+    .sidebar{transform:translateX(-100%)}
+    .sidebar.open{transform:translateX(0)}
+    .main-content{margin-left:0;padding:16px}
+    .hamburger{display:flex!important}
+  }
+  .hamburger{display:none;position:fixed;top:16px;left:16px;z-index:200;
+    background:var(--navy);color:#fff;border:none;border-radius:8px;
+    padding:10px;cursor:pointer;font-size:18px}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99}
+  .overlay.show{display:block}
+  .badge{display:inline-block;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
+  .badge-blue{background:var(--sky);color:var(--blue)}
+  .badge-green{background:#dcfce7;color:var(--green)}
+  .results-summary{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+  .result-mini{background:#f8fafc;border-radius:10px;padding:14px;text-align:center;border:1px solid var(--border)}
+  .result-mini .grade-num{font-size:28px;font-weight:700;font-family:'DM Serif Display',serif}
+  .result-mini .grade-label{font-size:11px;color:var(--gray);margin-top:2px}
+  .result-mini .count{font-size:18px;font-weight:700}
+`;
+
+// ── COMPONENTS ───────────────────────────────────────────────────────────────
+
+function LoginPage({ onLogin }) {
+  const [mode, setMode] = useState("admin");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [teacher, setTeacher] = useState("");
+  const [error, setError] = useState("");
+
+  function handleLogin() {
+    setError("");
+    if (mode === "admin") {
+      if (username === ADMIN_ACCOUNT.username && password === ADMIN_ACCOUNT.password) {
+        onLogin({ role: "admin", name: ADMIN_ACCOUNT.name });
+      } else {
+        setError("Invalid admin username or password.");
+      }
+    } else {
+      const acc = TEACHER_ACCOUNTS.find(a => a.username === username.toLowerCase() && a.password === password);
+      if (acc) {
+        onLogin({ role: "teacher", name: acc.name, username: acc.username });
+      } else {
+        setError("Invalid teacher username or password.");
+      }
+    }
+  }
+
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div className="login-logo">
+          <div className="icon">🏫</div>
+          <h1>School Management System</h1>
+          <p>Academic Results Portal</p>
+        </div>
+        <div className="tab-row">
+          <button className={`tab-btn${mode==="admin"?" active":""}`} onClick={()=>{setMode("admin");setError("")}}>🔐 Admin</button>
+          <button className={`tab-btn${mode==="teacher"?" active":""}`} onClick={()=>{setMode("teacher");setError("")}}>👩‍🏫 Teacher</button>
+        </div>
+        {error && <div className="error-msg">⚠️ {error}</div>}
+        {mode === "teacher" && (
+          <div className="form-group">
+            <label>Your Name</label>
+            <select value={teacher} onChange={e=>{setTeacher(e.target.value);setUsername(e.target.value.split(" ")[0].toLowerCase())}}>
+              <option value="">-- Select your name --</option>
+              {TEACHERS.map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        )}
+        {mode === "admin" && (
+          <div className="form-group">
+            <label>Username</label>
+            <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="admin" />
+          </div>
+        )}
+        <div className="form-group">
+          <label>Password</label>
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+            placeholder="Enter password" onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
+        </div>
+        {mode === "teacher" && (
+          <div style={{background:"#f0f9ff",borderRadius:"8px",padding:"10px 12px",marginBottom:"16px",fontSize:"13px",color:"#0369a1"}}>
+            💡 Default password: <strong>school2024</strong> — ask admin to change it.
+          </div>
+        )}
+        <button className="btn-primary" onClick={handleLogin}>Sign In →</button>
+      </div>
+    </div>
+  );
+}
+
+function Sidebar({ user, page, setPage, onLogout, open, setOpen }) {
+  const adminNav = [
+    { id:"dashboard", icon:"📊", label:"Dashboard" },
+    { id:"marks", icon:"✏️", label:"Enter / View Marks" },
+    { id:"results", icon:"📋", label:"Results & Reports" },
+    { id:"teachers", icon:"👩‍🏫", label:"Teachers" },
+    { id:"classes", icon:"🏫", label:"Classes" },
+  ];
+  const teacherNav = [
+    { id:"dashboard", icon:"📊", label:"Dashboard" },
+    { id:"marks", icon:"✏️", label:"Enter Marks" },
+    { id:"results", icon:"📋", label:"View Results" },
+  ];
+  const nav = user.role === "admin" ? adminNav : teacherNav;
+
+  return (
+    <>
+      <button className="hamburger" onClick={()=>setOpen(!open)}>☰</button>
+      <div className={`overlay${open?" show":""}`} onClick={()=>setOpen(false)} />
+      <div className={`sidebar${open?" open":""}`}>
+        <div className="sidebar-logo">
+          <h2>🏫 School<br/>Results Portal</h2>
+          <p>Academic Management</p>
+        </div>
+        <div className="sidebar-user">
+          <div className="role">{user.role === "admin" ? "Administrator" : "Teacher"}</div>
+          <div className="name">{user.name}</div>
+        </div>
+        <nav className="sidebar-nav">
+          {nav.map(n => (
+            <div key={n.id} className={`nav-item${page===n.id?" active":""}`}
+              onClick={()=>{setPage(n.id);setOpen(false)}}>
+              <span className="icon">{n.icon}</span>
+              {n.label}
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <button className="logout-btn" onClick={onLogout}>🚪 Sign Out</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Dashboard({ user, marks }) {
+  const totalStudents = 950;
+  const allEntries = Object.values(marks).flat();
+  const withOverall = allEntries.filter(r => calcRow(r).overall !== null);
+  const gradeCounts = {};
+  for (let i=1;i<=9;i++) gradeCounts[i]=0;
+  withOverall.forEach(r => {
+    const g = calcRow(r).grade;
+    if (g !== "-") gradeCounts[parseInt(g)] = (gradeCounts[parseInt(g)]||0)+1;
+  });
+  const passCount = withOverall.filter(r => calcRow(r).overall >= 40).length;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>Welcome, {user.name.split(" ")[0]} 👋</h1>
+        <p>School Academic Results Management System</p>
+      </div>
+      <div className="stat-grid">
+        <div className="stat-card" style={{borderLeftColor:"#0f2d5e"}}>
+          <div className="label">Total Pupils</div>
+          <div className="value">~{totalStudents}</div>
+          <div className="sub">Enrolled this term</div>
+        </div>
+        <div className="stat-card" style={{borderLeftColor:"#16a34a"}}>
+          <div className="label">Classes</div>
+          <div className="value">{CLASSES.length}</div>
+          <div className="sub">Across all forms</div>
+        </div>
+        <div className="stat-card" style={{borderLeftColor:"#2563eb"}}>
+          <div className="label">Subjects</div>
+          <div className="value">{SUBJECTS.length}</div>
+          <div className="sub">Taught at school</div>
+        </div>
+        <div className="stat-card" style={{borderLeftColor:"#f59e0b"}}>
+          <div className="label">Teachers</div>
+          <div className="value">{TEACHERS.length}</div>
+          <div className="sub">On the staff list</div>
+        </div>
+        <div className="stat-card" style={{borderLeftColor:"#8b5cf6"}}>
+          <div className="label">Results Entered</div>
+          <div className="value">{withOverall.length}</div>
+          <div className="sub">Complete results</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">📐 How Marks Are Calculated</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"12px"}}>
+          {[
+            {label:"Pre-Midterm",desc:"Entered as raw mark out of 100",color:"#dbeafe"},
+            {label:"Midterm",desc:"Entered as raw mark out of 100",color:"#dcfce7"},
+            {label:"CA Mark",desc:"(Pre-Mid + Midterm) ÷ 2",color:"#fef3c7"},
+            {label:"40% of CA",desc:"CA × 0.40",color:"#fce7f3"},
+            {label:"Exam Mark",desc:"Entered as raw mark out of 100",color:"#ede9fe"},
+            {label:"60% of Exam",desc:"Exam × 0.60",color:"#ffedd5"},
+            {label:"Overall Mark",desc:"40% CA + 60% Exam",color:"#f0fdf4"},
+            {label:"Grade (1–9)",desc:"Based on school grading scale",color:"#f8fafc"},
+          ].map(item => (
+            <div key={item.label} style={{background:item.color,borderRadius:"10px",padding:"14px"}}>
+              <div style={{fontWeight:700,fontSize:"13px",color:"#0f2d5e"}}>{item.label}</div>
+              <div style={{fontSize:"12px",color:"#64748b",marginTop:"4px"}}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">🎓 Grading Scale</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"10px"}}>
+          {[
+            {g:"1",range:"75–100"},{g:"2",range:"70–74"},{g:"3",range:"65–69"},
+            {g:"4",range:"60–64"},{g:"5",range:"55–59"},{g:"6",range:"50–54"},
+            {g:"7",range:"45–49"},{g:"8",range:"40–44"},{g:"9",range:"0–39"},
+          ].map(item => (
+            <div key={item.g} style={{background:gradeColor(item.g)+"22",border:`2px solid ${gradeColor(item.g)}`,
+              borderRadius:"10px",padding:"10px 16px",textAlign:"center",minWidth:"90px"}}>
+              <div style={{fontSize:"22px",fontWeight:700,color:gradeColor(item.g)}}>Grade {item.g}</div>
+              <div style={{fontSize:"12px",color:"#64748b"}}>{item.range}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarksPage({ user, marks, setMarks, showToast }) {
+  const [cls, setCls] = useState("");
+  const [subject, setSubject] = useState("");
+  const [rows, setRows] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const key = cls && subject ? `${cls}__${subject}` : null;
+
+  function loadData() {
+    if (!key) return;
+    const existing = marks[key] || [];
+    // generate 30 pupils if none
+    if (existing.length === 0) {
+      const pupils = Array.from({length:30},(_,i)=>({
+        id:i+1, name:`Pupil ${i+1}`, preMid:"", midterm:"", exam:""
+      }));
+      setRows(pupils);
+    } else {
+      setRows(JSON.parse(JSON.stringify(existing)));
+    }
+    setLoaded(true);
+  }
+
+  function updateRow(idx, field, val) {
+    setRows(prev => {
+      const next = [...prev];
+      next[idx] = {...next[idx], [field]: val};
+      return next;
+    });
+  }
+
+  function handleSave() {
+    if (!key) return;
+    setMarks(prev => {
+      const next = {...prev, [key]: rows};
+      saveMarks(next);
+      return next;
+    });
+    showToast("✅ Marks saved successfully!");
+  }
+
+  const classOptions = user.role === "admin" ? CLASSES : CLASSES;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>✏️ Enter Marks</h1>
+        <p>Select a class and subject to enter or update marks</p>
+      </div>
+      <div className="card">
+        <div className="filter-row">
+          <div className="filter-group">
+            <label>Class</label>
+            <select value={cls} onChange={e=>{setCls(e.target.value);setLoaded(false)}}>
+              <option value="">-- Select Class --</option>
+              {classOptions.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="filter-group">
+            <label>Subject</label>
+            <select value={subject} onChange={e=>{setSubject(e.target.value);setLoaded(false)}}>
+              <option value="">-- Select Subject --</option>
+              {SUBJECTS.map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <button className="btn-secondary" onClick={loadData} disabled={!cls||!subject}>
+            📂 Load / Open
+          </button>
+          {loaded && <button className="btn-save" onClick={handleSave}>💾 Save Marks</button>}
+        </div>
+
+        {!loaded && (
+          <div className="empty-state">
+            <div className="icon">📋</div>
+            <p>Select a class and subject, then click <strong>Load / Open</strong></p>
+          </div>
+        )}
+
+        {loaded && (
+          <>
+            <div style={{marginBottom:"12px",display:"flex",alignItems:"center",gap:"12px"}}>
+              <span className="badge badge-blue">{cls}</span>
+              <span className="badge badge-green">{subject}</span>
+              <span style={{fontSize:"13px",color:"#64748b"}}>{rows.length} pupils</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Pupil Name</th>
+                    <th>Pre-Midterm<br/><span style={{fontWeight:400,fontSize:11}}>out of 100</span></th>
+                    <th>Midterm<br/><span style={{fontWeight:400,fontSize:11}}>out of 100</span></th>
+                    <th style={{background:"#1e4a8a"}}>CA Mark</th>
+                    <th style={{background:"#1e4a8a"}}>40% of CA</th>
+                    <th>Exam Mark<br/><span style={{fontWeight:400,fontSize:11}}>out of 100</span></th>
+                    <th style={{background:"#1e4a8a"}}>60% of Exam</th>
+                    <th style={{background:"#0f2d5e"}}>Overall %</th>
+                    <th style={{background:"#0f2d5e"}}>Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row,idx)=>{
+                    const {ca,ca40,exam60,overall,grade} = calcRow(row);
+                    const fmt = v => v!==null ? v.toFixed(1) : "-";
+                    return (
+                      <tr key={row.id}>
+                        <td style={{color:"#94a3b8",fontSize:12}}>{idx+1}</td>
+                        <td>
+                          <input style={{border:"none",background:"transparent",width:"140px",
+                            fontFamily:"'DM Sans',sans-serif",fontSize:13,color:"#0f2d5e",fontWeight:500}}
+                            value={row.name}
+                            onChange={e=>updateRow(idx,"name",e.target.value)} />
+                        </td>
+                        <td><input className="mark-input" type="number" min="0" max="100"
+                          value={row.preMid} onChange={e=>updateRow(idx,"preMid",e.target.value)} /></td>
+                        <td><input className="mark-input" type="number" min="0" max="100"
+                          value={row.midterm} onChange={e=>updateRow(idx,"midterm",e.target.value)} /></td>
+                        <td className="calc-cell" style={{background:"#f0f7ff"}}>{fmt(ca)}</td>
+                        <td className="calc-cell" style={{background:"#f0f7ff"}}>{fmt(ca40)}</td>
+                        <td><input className="mark-input" type="number" min="0" max="100"
+                          value={row.exam} onChange={e=>updateRow(idx,"exam",e.target.value)} /></td>
+                        <td className="calc-cell" style={{background:"#f0f7ff"}}>{fmt(exam60)}</td>
+                        <td className="calc-cell" style={{background:"#e8f0fe",fontWeight:700,fontSize:15}}>
+                          {overall!==null ? overall.toFixed(1) : "-"}
+                        </td>
+                        <td style={{background:"#e8f0fe"}}>
+                          {grade!=="-" ? (
+                            <div className="grade-badge" style={{background:gradeColor(grade),margin:"0 auto"}}>
+                              {grade}
+                            </div>
+                          ) : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{marginTop:"16px",display:"flex",justifyContent:"flex-end"}}>
+              <button className="btn-save" onClick={handleSave}>💾 Save All Marks</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResultsPage({ marks }) {
+  const [filterCls, setFilterCls] = useState("");
+  const [filterSubject, setFilterSubject] = useState("");
+
+  const key = filterCls && filterSubject ? `${filterCls}__${filterSubject}` : null;
+  const rows = key ? (marks[key] || []) : [];
+  const withData = rows.filter(r => calcRow(r).overall !== null);
+
+  const gradeCounts = {};
+  for(let i=1;i<=9;i++) gradeCounts[i]=0;
+  withData.forEach(r => {
+    const g = parseInt(calcRow(r).grade);
+    if (!isNaN(g)) gradeCounts[g]=(gradeCounts[g]||0)+1;
+  });
+
+  const avg = withData.length > 0
+    ? withData.reduce((s,r) => s + calcRow(r).overall,0) / withData.length
+    : null;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>📋 Results & Reports</h1>
+        <p>View calculated results for any class and subject</p>
+      </div>
+      <div className="card">
+        <div className="filter-row">
+          <div className="filter-group">
+            <label>Class</label>
+            <select value={filterCls} onChange={e=>setFilterCls(e.target.value)}>
+              <option value="">-- All Classes --</option>
+              {CLASSES.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="filter-group">
+            <label>Subject</label>
+            <select value={filterSubject} onChange={e=>setFilterSubject(e.target.value)}>
+              <option value="">-- All Subjects --</option>
+              {SUBJECTS.map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {key && withData.length > 0 && (
+          <>
+            <div style={{display:"flex",gap:"16px",flexWrap:"wrap",marginBottom:"20px"}}>
+              <div className="stat-card" style={{flex:"0 0 auto",minWidth:"160px",borderLeftColor:"#2563eb"}}>
+                <div className="label">Class Average</div>
+                <div className="value">{avg.toFixed(1)}%</div>
+                <div className="sub">Grade {getGrade(avg)}</div>
+              </div>
+              <div className="stat-card" style={{flex:"0 0 auto",minWidth:"160px",borderLeftColor:"#16a34a"}}>
+                <div className="label">Pass Rate</div>
+                <div className="value">{Math.round(withData.filter(r=>calcRow(r).overall>=40).length/withData.length*100)}%</div>
+                <div className="sub">{withData.filter(r=>calcRow(r).overall>=40).length} of {withData.length}</div>
+              </div>
+              <div className="stat-card" style={{flex:"0 0 auto",minWidth:"160px",borderLeftColor:"#f59e0b"}}>
+                <div className="label">Pupils Assessed</div>
+                <div className="value">{withData.length}</div>
+                <div className="sub">With complete marks</div>
+              </div>
+            </div>
+
+            <div style={{marginBottom:"16px"}}>
+              <div className="card-title">Grade Distribution</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
+                {[1,2,3,4,5,6,7,8,9].map(g => (
+                  <div key={g} style={{background:gradeColor(g)+"22",border:`2px solid ${gradeColor(g)}`,
+                    borderRadius:"8px",padding:"8px 14px",textAlign:"center",minWidth:"70px"}}>
+                    <div style={{fontWeight:700,fontSize:"18px",color:gradeColor(g)}}>Grade {g}</div>
+                    <div style={{fontSize:"20px",fontWeight:700,color:"#0f2d5e"}}>{gradeCounts[g]}</div>
+                    <div style={{fontSize:"11px",color:"#64748b"}}>pupils</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {key && rows.length === 0 && (
+          <div className="empty-state">
+            <div className="icon">📭</div>
+            <p>No marks entered yet for <strong>{filterCls} – {filterSubject}</strong></p>
+          </div>
+        )}
+
+        {key && rows.length > 0 && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Pupil Name</th>
+                  <th>Pre-Mid</th>
+                  <th>Midterm</th>
+                  <th>CA</th>
+                  <th>40% CA</th>
+                  <th>Exam</th>
+                  <th>60% Exam</th>
+                  <th>Overall %</th>
+                  <th>Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row,idx) => {
+                  const {ca,ca40,exam60,overall,grade} = calcRow(row);
+                  const fmt = v => v!==null ? v.toFixed(1) : "-";
+                  return (
+                    <tr key={idx}>
+                      <td style={{color:"#94a3b8",fontSize:12}}>{idx+1}</td>
+                      <td style={{fontWeight:500}}>{row.name}</td>
+                      <td>{row.preMid||"-"}</td>
+                      <td>{row.midterm||"-"}</td>
+                      <td className="calc-cell">{fmt(ca)}</td>
+                      <td className="calc-cell">{fmt(ca40)}</td>
+                      <td>{row.exam||"-"}</td>
+                      <td className="calc-cell">{fmt(exam60)}</td>
+                      <td style={{fontWeight:700,color:"#0f2d5e"}}>{overall!==null?overall.toFixed(1):"-"}</td>
+                      <td>
+                        {grade!=="-" ? (
+                          <div className="grade-badge" style={{background:gradeColor(grade),margin:"0 auto"}}>
+                            {grade}
+                          </div>
+                        ) : "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!key && (
+          <div className="empty-state">
+            <div className="icon">🔍</div>
+            <p>Select a class and subject to view results</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TeachersPage() {
+  return (
+    <div>
+      <div className="page-header">
+        <h1>👩‍🏫 Teachers</h1>
+        <p>All {TEACHERS.length} staff members — default password is <strong>school2024</strong></p>
+      </div>
+      <div className="card">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Full Name</th>
+                <th>Username (to log in)</th>
+                <th>Default Password</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TEACHERS.map((t,i) => (
+                <tr key={t}>
+                  <td style={{color:"#94a3b8",fontSize:12}}>{i+1}</td>
+                  <td style={{fontWeight:500}}>{t}</td>
+                  <td><span className="badge badge-blue">{t.split(" ")[0].toLowerCase()}</span></td>
+                  <td><span className="badge badge-green">school2024</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClassesPage() {
+  return (
+    <div>
+      <div className="page-header">
+        <h1>🏫 Classes</h1>
+        <p>{CLASSES.length} classes across all forms</p>
+      </div>
+      <div className="card">
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:"12px"}}>
+          {CLASSES.map(c => (
+            <div key={c} style={{background:"var(--sky)",borderRadius:"12px",padding:"18px",
+              textAlign:"center",border:"2px solid #bfdbfe"}}>
+              <div style={{fontSize:"22px",fontWeight:700,color:"var(--navy)",fontFamily:"'DM Serif Display',serif"}}>{c}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState("dashboard");
+  const [marks, setMarks] = useState(loadMarks);
+  const [toast, setToast] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(()=>setToast(""),3000);
+  }
+
+  if (!user) return (
+    <>
+      <style>{css}</style>
+      <LoginPage onLogin={u=>{setUser(u);setPage("dashboard")}} />
+    </>
+  );
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="app-layout">
+        <Sidebar user={user} page={page} setPage={setPage}
+          onLogout={()=>{setUser(null);setPage("dashboard")}}
+          open={sidebarOpen} setOpen={setSidebarOpen} />
+        <main className="main-content">
+          {page==="dashboard" && <Dashboard user={user} marks={marks} />}
+          {page==="marks" && <MarksPage user={user} marks={marks} setMarks={setMarks} showToast={showToast} />}
+          {page==="results" && <ResultsPage marks={marks} />}
+          {page==="teachers" && user.role==="admin" && <TeachersPage />}
+          {page==="classes" && user.role==="admin" && <ClassesPage />}
+        </main>
+      </div>
+      {toast && <div className="success-toast">{toast}</div>}
+    </>
+  );
+}
